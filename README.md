@@ -4,7 +4,7 @@ This monitor checks all eight unlocked iPhone Duo storage and color combinations
 
 ## Cloud schedule and alerts
 
-GitHub Actions runs `.github/workflows/duo-stock.yml` every five minutes (subject to GitHub scheduling delays). The workflow can also be started from the repository's **Actions → Check iPhone Duo pickup → Run workflow** page.
+A Cloudflare Worker checks stock automatically every five minutes. For a separate manual check, use **Actions → Check iPhone Duo pickup → Run workflow** in this repository.
 
 The workflow sends an ntfy alert only when a store and model combination becomes available after being unavailable. Its current availability state is stored in the repository issue named **iPhone Duo stock monitor state**. A failed Apple request leaves that state unchanged so a transient API error cannot cause a false alert.
 
@@ -17,5 +17,3 @@ python3 iphone_duo_check.py
 ```
 
 To check a different ZIP code, use `--location 10001`; repeat `--location` to check several. The local script stores prior available combinations in `~/.local/state/iphone-duo-monitor/state.json` and sends a macOS notification only when a new one appears. Run it with cron or another scheduler if you want a separate local monitor.
-
-GitHub may delay or skip scheduled runs during high load and may disable scheduled workflows in inactive public repositories after 60 days. Check the Actions page if alerts seem to stop.

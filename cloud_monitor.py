@@ -51,18 +51,16 @@ def current_stock():
     return found_by_key
 
 
-def send_ntfy(items):
+def send_ntfy(title, message):
     topic = os.environ["NTFY_TOPIC"]
     if not topic or not all(char.isalnum() or char in "-_" for char in topic):
         raise RuntimeError("NTFY_TOPIC is missing or invalid")
-    lines = [f"{item['model']} at Apple {item['store']} ({item['quote']})" for item in items]
-    message = "iPhone Duo pickup available:\n" + "\n".join(lines) + f"\n{SHOP_URL}"
     request = urllib.request.Request(
         "https://ntfy.sh/" + topic,
         data=message.encode(),
         method="POST",
         headers={
-            "Title": "iPhone Duo pickup available",
+            "Title": title,
             "Priority": "high",
             "Click": SHOP_URL,
             "Content-Type": "text/plain; charset=utf-8",
@@ -80,19 +78,30 @@ def main():
     found = current_stock()  # On any failed Apple request, leave saved state untouched.
     issue = state_issue()
     try:
-        previous = set(json.loads(issue.get("body") or "{}").get("available", []))
-    except (ValueError, TypeError) as error:
+        state = json.loads(issue.get("body") or "{}")
+        previous = set(state.get("available", []))
+    except (AttributeError, ValueError, TypeError) as error:
         raise RuntimeError("State issue has invalid JSON") from error
     fresh = [item for key, item in found.items() if key not in previous]
 
+    first_scheduled_run = (os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+                           and not state.get("scheduled_notification_sent"))
     if fresh:
-        send_ntfy(fresh)
+        lines = [f"{item['model']} at Apple {item['store']} ({item['quote']})" for item in fresh]
+        send_ntfy("iPhone Duo pickup available", "\n".join(lines) + f"\n{SHOP_URL}")
         print("Sent ntfy stock alert for", ", ".join(item["key"] for item in fresh))
+    elif first_scheduled_run:
+        send_ntfy("iPhone Duo GitHub schedule test",
+                  "GitHub completed an automatic pickup check. This is a test notification.")
+        print("Sent one-time ntfy test from an automatic GitHub run")
 
     keys = sorted(found)
-    if keys != sorted(previous):
+    if keys != sorted(previous) or first_scheduled_run:
+        state["available"] = keys
+        if first_scheduled_run:
+            state["scheduled_notification_sent"] = True
         github("PATCH", f"/issues/{issue['number']}", {
-            "body": json.dumps({"available": keys}, indent=2),
+            "body": json.dumps(state, indent=2),
         })
         print("Updated saved stock state")
 
